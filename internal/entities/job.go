@@ -1,16 +1,30 @@
 package entities
 
+import (
+	"task-queue/internal/dto"
+	"time"
+
+	"github.com/google/uuid"
+)
+
 type Job struct {
 	Id string `json:"id"`
 	Type string `json:"task"`
 	Priority string `json:"priority"`
-	Status string `jsom:"status"`
-	Payload Payload `json:"payload"`
+	Status string `json:"status"`
+	Attempts int `json:"attempts"`
+	Payload map[string]interface{} `json:"payload"`
+	CreatedAt time.Time
 }
 
-// Adicionar um payload mais completo, dependendo do job
-// Tipo mandar email, criar usuário, etc...
-type Payload struct {
-	Title string `json:"title"`
-	Text string `json:"text"`
+func NewJob(req dto.CreateJobRequest) Job {
+	return Job{
+		Id: uuid.NewString(),
+		Type: req.Type,
+		Priority: req.Priority,
+		Status: "queued",
+		Attempts: 0,
+		Payload: req.Payload,
+		CreatedAt: time.Now(),
+	}
 }

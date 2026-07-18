@@ -1,37 +1,24 @@
 package usecases
 
 import (
-	"encoding/json"
-	"os"
-	e "task-queue/internal/entities"
+	"task-queue/internal/dto"
+	"task-queue/internal/entities"
+	"task-queue/internal/queue"
 
-	"github.com/google/uuid"
 )
 
-func CreateJob(job e.Job) error {
-	var db e.DataBase
+type CreateJobUseCase struct {
+	queue *queue.Queue
+}
 
-	fileBytes, err := os.ReadFile("db.json")
-	if err != nil {
-		return err
+func NewCreateJobUseCase(q *queue.Queue) *CreateJobUseCase {
+	return &CreateJobUseCase{
+		queue: q,
 	}
+}
 
-	if err = json.Unmarshal(fileBytes, &db); err != nil {
-		return err
-	}
-
-	job.Id = uuid.New().String()
-
-	db.Jobs = append(db.Jobs, job)
-
-	updatedBytes, err := json.MarshalIndent(db, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	if err = os.WriteFile("db.json", updatedBytes, 0644); err != nil{
-		return err
-	}
-	
-	return nil
+func (uc *CreateJobUseCase) Execute(req dto.CreateJobRequest) (entities.Job, error) {
+	job := entities.NewJob(req)
+	uc.queue.Push(job)
+	return job, nil
 }
