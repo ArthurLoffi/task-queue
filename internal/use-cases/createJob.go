@@ -3,22 +3,21 @@ package usecases
 import (
 	"task-queue/internal/dto"
 	"task-queue/internal/entities"
-	"task-queue/internal/queue"
-
+	pool "task-queue/internal/worker-pool"
 )
 
 type CreateJobUseCase struct {
-	queue *queue.Queue
+	pool *pool.Pool
 }
 
-func NewCreateJobUseCase(q *queue.Queue) *CreateJobUseCase {
+func NewCreateJobUseCase(p *pool.Pool) *CreateJobUseCase {
 	return &CreateJobUseCase{
-		queue: q,
+		pool: p,
 	}
 }
 
 func (uc *CreateJobUseCase) Execute(req dto.CreateJobRequest) (entities.Job, error) {
 	job := entities.NewJob(req)
-	uc.queue.Push(job)
+	uc.pool.Submit(job)
 	return job, nil
 }

@@ -1,9 +1,10 @@
 package main
 
 import (
+	"log"
 	"task-queue/cmd/controller"
-	"task-queue/internal/queue"
 	usecases "task-queue/internal/use-cases"
+	pool "task-queue/internal/worker-pool"
 
 	"github.com/gin-gonic/gin"
 )
@@ -11,10 +12,18 @@ import (
 func main() {
 	r := gin.Default()
 
-	q := queue.NewQueue(10)
+	// q := queue.NewQueue(10)
 
-	createJobUC := usecases.NewCreateJobUseCase(q)
+	p := pool.NewPool(3, 10)
+
+	createJobUC := usecases.NewCreateJobUseCase(p)
 	ctrl := controller.NewController(createJobUC)
+
+	go func()  {
+		for result := range p.Results {
+			log.Printf("Job ID: %s | Processed in: %s", result.Id, result.Duration)
+		}
+	}()
 
 	r.POST("/job", ctrl.CreateJob)
 
