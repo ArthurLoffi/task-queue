@@ -1,24 +1,6 @@
 {
-  "jobs": [
-    {
-      "id": "64daaad3-d608-4bdc-ae7a-66896628494c",
-      "task": "send-mail",
-      "priority": "high",
-      "Status": "open",
-      "payload": {
-        "title": "Send email to erick",
-        "text": "Hi erick, how are you?"
-      }
-    },
-    {
-      "id": "e1c63892-ce66-4d57-b8d8-a8eb32f08120",
-      "task": "send-message",
-      "priority": "low",
-      "Status": "open",
-      "payload": {
-        "title": "Send message for my mom",
-        "text": "Today I am study english"
-      }
-    }
-  ]
+  "completed": 2,
+  "failed": 0,
+  "initiated_at": "2026-07-21 20:32:23",
+  "completed_at": "2026-07-21 20:32:50"
 }
