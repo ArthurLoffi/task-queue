@@ -1,8 +1,11 @@
 package pool
 
 import (
+	"context"
+	"log"
 	"sync"
 	"task-queue/internal/entities"
+	"time"
 )
 
 type Pool struct {
@@ -16,16 +19,47 @@ func NewPool(numWorkers int, bufferSize int) *Pool {
 		Jobs: make(chan entities.Job, bufferSize),
 		Results: make(chan Result, bufferSize),
 	}
-	for range numWorkers {
+	for i := range numWorkers {
 		p.wg.Add(1)
-		go func ()  {
-			defer p.wg.Done()
-			for j := range p.Jobs {
-				p.Results <- ProcessJob(j)
-			}
-		}()
+		go p.worker(i)
 	}
+	
 	return p
+}
+
+func (p *Pool) worker(id int) {
+	defer p.wg.Done()
+
+	for j := range p.Jobs {
+		ctx, cancel := context.WithTimeout(
+			context.Background(),
+			3 * time.Second)
+		
+		result := p.processWithContext(ctx, id, j)
+		cancel() // Libera recursos do context
+		p.Results <- result
+	}
+}
+
+func (p *Pool) processWithContext(ctx context.Context, workerID int, j entities.Job) Result {
+	// Ele ainda está rodando no background
+	// Passar o context para o processJob e resolver internamente
+	done := make(chan Result, 1)
+
+	go func() {
+		done <- ProcessJob(j)
+	}()
+
+	select {
+		case result := <- done:
+			return result
+		case <- ctx.Done():
+			log.Printf("Timeout worker %d in job %s", workerID, j.Id)
+			return Result{
+				Id: j.Id,
+				Err: ctx.Err(),
+			}
+	}
 }
 
 func (p *Pool) Submit(j entities.Job) {

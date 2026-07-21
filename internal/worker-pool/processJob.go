@@ -7,7 +7,7 @@ import (
 
 type Result struct {
 	Id string
-	// Err error
+	Err error
 	Duration time.Duration
 }
 
