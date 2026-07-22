@@ -9,18 +9,37 @@ import (
 	"time"
 )
 
+type Processor interface {
+	Process(j entities.Job) Result
+}
+
+type defaultProcessor struct{}
+
+func (defaultProcessor) Process(j entities.Job) Result {
+	return ProcessJob(j)
+}
+
 type Pool struct {
 	Jobs chan entities.Job
 	Results chan Result
 	wg sync.WaitGroup
 	s *stats.Stats
+	processor Processor
 }
 
+// Novo metodo de criar pool com uma abstração
+// ao inves de usar diretamente o processJob.
+// Serve mais para test
 func NewPool(numWorkers int, bufferSize int) *Pool {
+	return NewPoolWithProcessor(numWorkers, bufferSize, defaultProcessor{})
+}
+
+func NewPoolWithProcessor(numWorkers int, bufferSize int, processor Processor) *Pool {
 	p := &Pool{
 		Jobs: make(chan entities.Job, bufferSize),
 		Results: make(chan Result, bufferSize),
 		s: stats.NewStats(),
+		processor: processor,
 	}
 	for i := range numWorkers {
 		p.wg.Add(1)

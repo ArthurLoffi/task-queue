@@ -13,7 +13,7 @@ type Job struct {
 	Priority string `json:"priority"`
 	Status string `json:"status"`
 	Attempts int `json:"attempts"`
-	Payload map[string]interface{} `json:"payload"`
+	Payload any `json:"payload"`
 	CreatedAt time.Time
 }
 
