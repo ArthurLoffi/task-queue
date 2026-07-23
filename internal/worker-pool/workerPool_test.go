@@ -35,7 +35,7 @@ func (f *fakeProcessor) Process(j entities.Job) Result {
 // Verifica se o resultado retornado é o mesmo do id do job criado
 // Também verifica retorno de erro e timeout
 func TestPool_SubmitAndProcess(t *testing.T) {
-	p := NewPoolWithProcessor(3, 5, &fakeProcessor{})
+	p := NewPoolWithProcessor(3, 5, &fakeProcessor{delay: 50 * time.Millisecond})
 
 	job := entities.Job{Id: "job-1"}
 	p.Submit(job)
@@ -48,7 +48,7 @@ func TestPool_SubmitAndProcess(t *testing.T) {
 		if result.Err != nil {
 			t.Fatalf("Expected without error, got: %v", result.Err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(1 * time.Second):
 		t.Errorf("Timeout waiting job result")
 	}
 
@@ -66,7 +66,7 @@ func TestPool_SubmitAndProcess(t *testing.T) {
 // Verifica se todos os jobs são processados corretamente
 // por workers diferentes
 func TestPool_MultipleJobs(t *testing.T) {
-	p := NewPoolWithProcessor(3, 10, &fakeProcessor{})
+	p := NewPoolWithProcessor(3, 10, &fakeProcessor{delay: 50 * time.Millisecond})
 
 	const total = 10
 	for i := range total {
@@ -116,5 +116,23 @@ func TestPool_ShutdownClosesResults(t *testing.T) {
 // Falta adicionar uma injeção para criar um job
 // lento que simule o timeout
 func TestPool_TImeout(t *testing.T) {
-	t.Skip("Tem que fazer a simulação de um job lento em especifico")
+	p := NewPoolWithProcessor(3, 10, &fakeProcessor{delay: 4 * time.Second})
+
+	p.Submit(entities.Job{Id: "job-slow"})
+
+	select {
+	case result := <-p.Results:
+		if result.Err == nil {
+			t.Errorf("Expected timeout error, got nil")
+		}
+	case <-time.After(5 * time.Second):
+		t.Errorf("Timeout waiting job result")
+	}
+
+	p.Shutdown()
+
+	_, failed, _ := p.Stats().Snapshot()
+	if failed != 1 {
+		t.Errorf("Expected one job failed, got %d", failed)
+	}
 }

@@ -69,7 +69,7 @@ func (p *Pool) processWithContext(ctx context.Context, workerID int, j entities.
 	done := make(chan Result, 1)
 
 	go func() {
-		done <- ProcessJob(j)
+		done <- p.processor.Process(j)
 	}()
 
 	select {
