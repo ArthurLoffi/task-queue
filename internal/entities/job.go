@@ -10,7 +10,7 @@ import (
 type Job struct {
 	Id string `json:"id"`
 	Type string `json:"task"`
-	Priority string `json:"priority"`
+	Priority int `json:"priority"`
 	Status string `json:"status"`
 	Attempts int `json:"attempts"`
 	Payload any `json:"payload"`

@@ -31,6 +31,30 @@ func (f *fakeProcessor) Process(j entities.Job) Result {
 	}
 }
 
+// Teste do processador default
+// Func para testes
+func TestDefaultProcessor_Process(t *testing.T) {
+	result := defaultProcessor{}.Process(entities.Job{Id: "job-1"})
+
+	if result.Id != "job-1" {
+		t.Errorf("Want result.Id = job-1, got %s", result.Id)
+	}
+	if result.Err != nil {
+		t.Errorf("Expected no error, got: %v", result.Err)
+	}
+}
+
+// Valida essa Func para garantir
+// que todos os campos sejam preenchidos
+func TestPool_NewPool(t *testing.T) {
+	pool := NewPool(3, 10)
+	defer pool.Shutdown()
+
+	if pool.Jobs == nil || pool.processor == nil || pool.Results == nil || pool.s == nil {
+		t.Errorf("Expected a completed pool struct")
+	}
+}
+
 // Testa se está funcionando o envio e o processamento de um job
 // Verifica se o resultado retornado é o mesmo do id do job criado
 // Também verifica retorno de erro e timeout
@@ -115,8 +139,8 @@ func TestPool_ShutdownClosesResults(t *testing.T) {
 
 // Falta adicionar uma injeção para criar um job
 // lento que simule o timeout
-func TestPool_TImeout(t *testing.T) {
-	p := NewPoolWithProcessor(3, 10, &fakeProcessor{delay: 4 * time.Second})
+func TestPool_Timeout(t *testing.T) {
+	p := NewPoolWithProcessor(1, 1, &fakeProcessor{delay: 4 * time.Second})
 
 	p.Submit(entities.Job{Id: "job-slow"})
 
