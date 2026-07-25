@@ -22,7 +22,7 @@ func (h itemHeap) Less(i, j int) bool {
 }
 
 func (h itemHeap) Swap(i, j int) {
-	h[i], h[j] = h[i], h[j]
+	h[i], h[j] = h[j], h[i]
 	h[i].index = i
 	h[j].index = j
 }
@@ -71,8 +71,31 @@ func (pq *PriorityQueue) Push(j entities.Job) {
 	pq.cond.Signal()
 }
 
-func (pq *PriorityQueue) Pop() {}
+func (pq *PriorityQueue) Pop() (job entities.Job, ok bool) {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
 
-func (pq *PriorityQueue) Len() {}
+	for len(pq.items) == 0 && !pq.closed {
+		pq.cond.Wait()
+	}
 
-func (pq *PriorityQueue) Close() {}
+	if len(pq.items) == 0 && pq.closed {
+		return entities.Job{}, false
+	}
+
+	it := heap.Pop(&pq.items).(*item)
+	return it.job, true
+}
+
+func (pq *PriorityQueue) Len() int {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+	return len(pq.items)
+}
+
+func (pq *PriorityQueue) Close() {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+	pq.closed = true
+	pq.cond.Broadcast()
+}

@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync"
 	"task-queue/internal/entities"
+	"task-queue/internal/queue"
 	"task-queue/internal/stats"
 	"time"
 )
@@ -20,7 +21,7 @@ func (defaultProcessor) Process(j entities.Job) Result {
 }
 
 type Pool struct {
-	Jobs chan entities.Job
+	Jobs *queue.PriorityQueue
 	Results chan Result
 	wg sync.WaitGroup
 	s *stats.Stats
@@ -36,7 +37,7 @@ func NewPool(numWorkers int, bufferSize int) *Pool {
 
 func NewPoolWithProcessor(numWorkers int, bufferSize int, processor Processor) *Pool {
 	p := &Pool{
-		Jobs: make(chan entities.Job, bufferSize),
+		Jobs: queue.NewPriorityQueue(),
 		Results: make(chan Result, bufferSize),
 		s: stats.NewStats(),
 		processor: processor,
@@ -52,7 +53,13 @@ func NewPoolWithProcessor(numWorkers int, bufferSize int, processor Processor) *
 func (p *Pool) worker(id int) {
 	defer p.wg.Done()
 
-	for j := range p.Jobs {
+	for {
+		j, ok := p.Jobs.Pop()
+
+		if !ok {
+			return
+		}
+
 		ctx, cancel := context.WithTimeout(
 			context.Background(),
 			3 * time.Second)
@@ -87,11 +94,11 @@ func (p *Pool) processWithContext(ctx context.Context, workerID int, j entities.
 }
 
 func (p *Pool) Submit(j entities.Job) {
-	p.Jobs <- j
+	p.Jobs.Push(j)
 }
 
 func (p *Pool) Shutdown() {
-	close(p.Jobs)
+	p.Jobs.Close()
 	p.wg.Wait()
 	close(p.Results)
 }
