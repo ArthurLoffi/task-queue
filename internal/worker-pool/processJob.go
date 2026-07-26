@@ -7,6 +7,7 @@ import (
 
 type Result struct {
 	Id string
+	Priority int
 	Err error
 	Duration time.Duration
 }
@@ -16,6 +17,7 @@ func ProcessJob(j entities.Job) Result {
 	time.Sleep(2 * time.Second) // Simulando que ta fazendo algo pesado
 	return Result{
 		Id: j.Id,
+		Priority: j.Priority,
 		Duration: time.Since(start),
 	}
 }
