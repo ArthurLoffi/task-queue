@@ -26,26 +26,41 @@ type Pool struct {
 	wg sync.WaitGroup
 	s *stats.Stats
 	processor Processor
+	agingCfg *AgingConfig
+	stopAging chan struct{}
+}
+
+type AgingConfig struct {
+	Interval time.Duration
+	Deadlines map[int]time.Duration
+	MaxPriority int
 }
 
 // Novo metodo de criar pool com uma abstração
 // ao inves de usar diretamente o processJob.
 // Serve mais para test
-func NewPool(numWorkers int, bufferSize int) *Pool {
-	return NewPoolWithProcessor(numWorkers, bufferSize, defaultProcessor{})
+func NewPool(numWorkers int, bufferSize int, agingCfg *AgingConfig) *Pool {
+	return NewPoolWithProcessor(numWorkers, bufferSize, defaultProcessor{}, agingCfg)
 }
 
-func NewPoolWithProcessor(numWorkers int, bufferSize int, processor Processor) *Pool {
+func NewPoolWithProcessor(numWorkers int, bufferSize int, processor Processor, agingCfg *AgingConfig) *Pool {
 	p := &Pool{
 		Jobs: queue.NewPriorityQueue(),
 		Results: make(chan Result, bufferSize),
 		s: stats.NewStats(),
 		processor: processor,
+		agingCfg: agingCfg,
+		stopAging: make(chan struct{}),
 	}
+
 	for i := range numWorkers {
 		p.wg.Add(1)
 		go p.worker(i)
 	}
+
+	if agingCfg != nil {
+		go p.startAging()
+	} 
 	
 	return p
 }
@@ -95,6 +110,23 @@ func (p *Pool) processWithContext(ctx context.Context, workerID int, j entities.
 
 func (p *Pool) Submit(j entities.Job) {
 	p.Jobs.Push(j)
+}
+
+func (p *Pool) startAging() {
+	ticket := time.NewTicker(p.agingCfg.Interval)
+	defer ticket.Stop()
+
+	for {
+		select{
+		case <-p.stopAging:
+			return
+		case <-ticket.C:
+			n := p.Jobs.PromoteExpired(p.agingCfg.Deadlines, p.agingCfg.MaxPriority)
+			if n >0 {
+				log.Printf("aging: %d jobs promoted by deadline", n)
+			}
+		}
+	}
 }
 
 func (p *Pool) Shutdown() {

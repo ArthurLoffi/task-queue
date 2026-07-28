@@ -7,6 +7,15 @@ import (
 	"time"
 )
 
+var agingCfg = AgingConfig{
+		Interval: 10 * time.Second,
+		Deadlines: map[int]time.Duration{
+			1: 5 * time.Minute,
+			2: 2 * time.Minute,
+		},
+		MaxPriority: 3,
+	}
+
 // fakeProcessor permite controlar, por teste, quanto tempo o
 // processamento leva e se ele retorna erro
 type fakeProcessor struct {
@@ -47,7 +56,7 @@ func TestDefaultProcessor_Process(t *testing.T) {
 // Valida essa Func para garantir
 // que todos os campos sejam preenchidos
 func TestPool_NewPool(t *testing.T) {
-	pool := NewPool(3, 10)
+	pool := NewPool(3, 10, &agingCfg)
 	defer pool.Shutdown()
 
 	if pool.Jobs == nil || pool.processor == nil || pool.Results == nil || pool.s == nil {
@@ -59,7 +68,7 @@ func TestPool_NewPool(t *testing.T) {
 // Verifica se o resultado retornado é o mesmo do id do job criado
 // Também verifica retorno de erro e timeout
 func TestPool_SubmitAndProcess(t *testing.T) {
-	p := NewPoolWithProcessor(3, 5, &fakeProcessor{delay: 50 * time.Millisecond})
+	p := NewPoolWithProcessor(3, 5, &fakeProcessor{delay: 50 * time.Millisecond}, &agingCfg)
 
 	job := entities.Job{Id: "job-1"}
 	p.Submit(job)
@@ -90,7 +99,7 @@ func TestPool_SubmitAndProcess(t *testing.T) {
 // Verifica se todos os jobs são processados corretamente
 // por workers diferentes
 func TestPool_MultipleJobs(t *testing.T) {
-	p := NewPoolWithProcessor(3, 10, &fakeProcessor{delay: 50 * time.Millisecond})
+	p := NewPoolWithProcessor(3, 10, &fakeProcessor{delay: 50 * time.Millisecond}, &agingCfg)
 
 	const total = 10
 	for i := range total {
@@ -120,7 +129,7 @@ loop:
 // Garante que após um p.Shutdown, o canal
 // Results é fechado sem ficar com goroutines travados
 func TestPool_ShutdownClosesResults(t *testing.T) {
-	p := NewPoolWithProcessor(1, 1, &fakeProcessor{})
+	p := NewPoolWithProcessor(1, 1, &fakeProcessor{}, &agingCfg)
 
 	p.Submit(entities.Job{Id: "job-x"})
 	<-p.Results
@@ -140,7 +149,7 @@ func TestPool_ShutdownClosesResults(t *testing.T) {
 // Falta adicionar uma injeção para criar um job
 // lento que simule o timeout
 func TestPool_Timeout(t *testing.T) {
-	p := NewPoolWithProcessor(1, 1, &fakeProcessor{delay: 4 * time.Second})
+	p := NewPoolWithProcessor(1, 1, &fakeProcessor{delay: 4 * time.Second}, &agingCfg)
 
 	p.Submit(entities.Job{Id: "job-slow"})
 
@@ -158,5 +167,56 @@ func TestPool_Timeout(t *testing.T) {
 	_, failed, _ := p.Stats().Snapshot()
 	if failed != 1 {
 		t.Errorf("Expected one job failed, got %d", failed)
+	}
+}
+
+// Test para verificar se está aumenta a priority
+// para previnir starvation, não está 100%
+// pois preciso testar o log também dessa func
+func TestPool_StartAgingPromotesExpiredJobs(t *testing.T) {
+	cfg := &AgingConfig{
+		Interval: 30 * time.Millisecond,
+		Deadlines: map[int]time.Duration{1: 50 * time.Millisecond},
+		MaxPriority: 3,
+	}
+
+	proc := &fakeProcessor{}
+	p := NewPoolWithProcessor(1, 10, proc, cfg)
+	defer p.Shutdown()
+
+	// Só ocupa para testar o aging
+	proc.mu.Lock()
+	proc.delay = 200 * time.Millisecond
+	proc.mu.Unlock()
+
+	p.Submit(entities.Job{Id: "blocker", Priority: 3, CreatedAt: time.Now()})
+
+	time.Sleep(20 * time.Millisecond)
+
+	proc.mu.Lock()
+	proc.delay = 0
+	proc.mu.Unlock()
+
+	jobB := entities.Job{Id: "B", Priority: 1, CreatedAt: time.Now()}
+	jobA := entities.Job{Id: "A", Priority: 1, CreatedAt: time.Now().Add(-100 * time.Millisecond)} // já expirado
+
+	p.Submit(jobB)
+	p.Submit(jobA)
+
+	var order []string
+	for i := 0; i < 3; i++ {
+		select {
+		case r := <-p.Results:
+			order = append(order, r.Id)
+		case <-time.After(2 * time.Second):
+			t.Fatalf("Timeout waiting results, partial order: %v", order)
+		}
+	}
+
+	if order[0] != "blocker" {
+		t.Fatalf("Expected blocker first, got %v", order)
+	}
+	if order[1] != "A" {
+		t.Errorf("Expected job A (promoted by aging) before the job B, got order: %v", order)
 	}
 }

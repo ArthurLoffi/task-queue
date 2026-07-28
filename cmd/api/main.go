@@ -3,13 +3,23 @@ package main
 import (
 	"log"
 	pool "task-queue/internal/worker-pool"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
+	agingCfg := pool.AgingConfig{
+		Interval: 10 * time.Second,
+		Deadlines: map[int]time.Duration{
+			1: 5 * time.Minute,
+			2: 2 * time.Minute,
+		},
+		MaxPriority: 3,
+	}
+
 	r := gin.Default()
-	p := pool.NewPool(3, 10)
+	p := pool.NewPool(3, 10, &agingCfg)
 	s := p.Stats()
 
 	go func()  {

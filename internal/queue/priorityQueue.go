@@ -4,11 +4,13 @@ import (
 	"container/heap"
 	"sync"
 	"task-queue/internal/entities"
+	"time"
 )
 
 type item struct {
 	job entities.Job
 	index int
+	promoted bool
 }
 
 type itemHeap []*item
@@ -98,4 +100,34 @@ func (pq *PriorityQueue) Close() {
 	defer pq.mu.Unlock()
 	pq.closed = true
 	pq.cond.Broadcast()
+}
+
+func (pq *PriorityQueue) PromoteExpired(deadlines map[int]time.Duration, maxPriority int) int {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+
+	now := time.Now()
+	promoted := 0
+
+	for _, it := range pq.items {
+		if it.promoted {
+			continue
+		}
+		deadline, ok := deadlines[it.job.Priority]
+		if !ok || deadline <= 0 {
+			continue
+		}
+		if now.Sub(it.job.CreatedAt) >= deadline {
+			it.job.Priority = maxPriority
+			it.promoted = true
+			promoted++
+		}
+	}
+
+	if promoted > 0 {
+		heap.Init(&pq.items)
+		pq.cond.Broadcast()
+	}
+
+	return promoted
 }
